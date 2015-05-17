@@ -21,9 +21,12 @@ public interface DreamTask extends Runnable{
 
     /**
      *
-     * @return the created time of the dream task
+     * @return the first executed time of the dream task
      */
-    long createTime();
+    long firstExecutedTime();
+
+
+    //void updateFirstExecutedTime(long executedTime);
 
 
 }

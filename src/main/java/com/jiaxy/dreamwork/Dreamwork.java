@@ -148,9 +148,13 @@ public class Dreamwork {
                         ConcurrentLinkedQueue<DreamTask> waitQueue = waitTaskQueueMap.get(dream);
                         if ( waitQueue != null ){
                             DreamTask dreamTask = waitQueue.poll();
-                            if ( dreamTask != null && !isTimeout(dreamTask) ){
-                                logger.debug(dreamTask+" retry execute :"+dreamTask.dream());
-                                Dreamwork.this.execute(dreamTask);
+                            if ( dreamTask != null ){
+                                if ( !isTimeout(dreamTask) ){
+                                    logger.debug(dreamTask+" retry execute :"+dreamTask.dream());
+                                    Dreamwork.this.execute(dreamTask);
+                                } else {
+                                    logger.info(dreamTask + " dropped for timeout :" + dreamTask.dream());
+                                }
                             }
                         }
                     }
@@ -166,10 +170,14 @@ public class Dreamwork {
                 for (Map.Entry<String,ConcurrentLinkedQueue<DreamTask>> entry : waitTaskQueueMap.entrySet() ){
                     if ( stat.isExecutable(entry.getKey()) ){
                         DreamTask dreamTask = entry.getValue().poll();
-                        if ( dreamTask != null && isTimeout(dreamTask) ){
-                            logger.info("retry execute :" + dreamTask.dream() + " by check service");
-                            //just only one
-                            Dreamwork.this.execute(dreamTask);
+                        if ( dreamTask != null ){
+                            if ( !isTimeout(dreamTask) ){
+                                logger.info("retry execute :" + dreamTask.dream() + " by check service");
+                                //just only one
+                                Dreamwork.this.execute(dreamTask);
+                            } else {
+                                logger.info("the dream task was dropped for timeout :" + dreamTask.dream() + " by check service");
+                            }
                         }
                     }
                 }
@@ -215,7 +223,7 @@ public class Dreamwork {
         protected void beforeExecute(Thread t, Runnable r) {
             super.beforeExecute(t, r);
             DreamTask dreamTask = (DreamTask) r;
-            if ( stat.isExecutable(dreamTask.dream()) ){
+            if ( !stat.isExecutable(dreamTask.dream()) ){
                 ConcurrentLinkedQueue waitTaskQueue = waitTaskQueueMap.get(dreamTask.dream());
                 if ( waitTaskQueue == null ){
                     waitTaskQueueMap.putIfAbsent(dreamTask.dream(), new ConcurrentLinkedQueue<DreamTask>());
@@ -223,6 +231,7 @@ public class Dreamwork {
                 } else {
                     waitTaskQueue.offer(dreamTask);
                 }
+                logger.info(dreamTask +" is not allowed to execute");
                 throw new RuntimeException(dreamTask+" exceed the threshold of task num");
             }
             stat.add(dreamTask.dream());
@@ -266,6 +275,13 @@ public class Dreamwork {
                     namePrefix + threadNumber.getAndIncrement(),
                     0);
             t.setDaemon(daemon);
+            t.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                @Override
+                public void uncaughtException(Thread t, Throwable e) {
+                    //TODO
+                    //System.out.println(e.getMessage());
+                }
+            });
             if (t.getPriority() != Thread.NORM_PRIORITY)
                 t.setPriority(Thread.NORM_PRIORITY);
             return t;

@@ -42,7 +42,9 @@ public class IncubatorStat {
      * @return true 没有超过容许执行的个数
      */
     public boolean isExecutable(String dream){
-        if ( getRunningTaskNum(dream) >= ThresholdUtil.getTaskNumThreshold(dream)){
+        int runningNum = getRunningTaskNum(dream);
+        if ( runningNum >= ThresholdUtil.getTaskNumThreshold(dream)){
+            logger.info(dream+" running task num:"+runningNum);
             return false;
         } else {
             return true;

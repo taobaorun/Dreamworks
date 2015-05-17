@@ -22,7 +22,7 @@ public class ThresholdUtil {
 
     public static final String TASK_TIMEOUT= ".timeout";
 
-    public static final int DEFAULT_TASK_TIMEOUT = 2000;
+    public static final int DEFAULT_TASK_TIMEOUT = 6000;
 
 
     /**
@@ -36,7 +36,7 @@ public class ThresholdUtil {
             return config.getInt(dream+TASK_NUM);
         } catch (Exception e) {
             //default number
-            return 10;
+            return 5;
         }
     }
 
@@ -64,7 +64,9 @@ public class ThresholdUtil {
      * @return
      */
     public static boolean isTimeout(DreamTask dreamTask){
-        if ( System.currentTimeMillis() - dreamTask.createTime() > getTaskTimeoutThreshold(dreamTask.dream())){
+        long waitTime = System.currentTimeMillis() - dreamTask.firstExecutedTime();
+        System.out.println("----------------------"+dreamTask+"-----------"+waitTime);
+        if ( waitTime > getTaskTimeoutThreshold(dreamTask.dream())){
             return true;
         } else {
             return false;

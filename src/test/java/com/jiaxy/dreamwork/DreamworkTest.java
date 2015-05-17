@@ -37,7 +37,7 @@ public class DreamworkTest {
                 dreamwork.execute(new MyDream("a.test"+i,i,doneWork));
                 dreamwork.execute(new MyDream("a.test"+i,i,doneWork));
                 dreamwork.execute(new MyDream("a.test"+i,i,doneWork));
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 e.printStackTrace();
             }
             i++;
@@ -102,14 +102,14 @@ public class DreamworkTest {
         }
 
         @Override
-        public long createTime() {
+        public long firstExecutedTime() {
             return createTime;
         }
 
         @Override
         public void run() {
             try {
-                Thread.sleep(new Random().nextInt(50000) + 2000);
+                Thread.sleep(new Random().nextInt(5000) + 1000);
                 doneWork.addAndGet(1);
             } catch (InterruptedException e) {
             }
