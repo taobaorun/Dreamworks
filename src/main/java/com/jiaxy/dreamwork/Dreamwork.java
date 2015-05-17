@@ -1,7 +1,6 @@
 package com.jiaxy.dreamwork;
 
 import com.jiaxy.dreamwork.assist.IncubatorStat;
-import com.jiaxy.dreamwork.assist.ThresholdUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,6 +9,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.jiaxy.dreamwork.assist.ThresholdUtil.DEFAULT_TASK_TIMEOUT;
+import static com.jiaxy.dreamwork.assist.ThresholdUtil.isTimeout;
 
 /**
  * Title:<br>
@@ -32,48 +34,50 @@ public class Dreamwork {
 
     private ExecutorService awaitTaskConsumer = Executors.newSingleThreadExecutor(new DreamworkThreadFactory("AwaitTaskConsumer",true));
 
+    private ScheduledExecutorService checkService = Executors.newSingleThreadScheduledExecutor(new DreamworkThreadFactory("AwaitCheck",true));
+
     private Incubator dwpool = null;
 
     public Dreamwork(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit, final BlockingQueue<Runnable> workQueue,boolean daemon) {
         dwpool = new Incubator(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue,daemon);
 //        dwpool.allowCoreThreadTimeOut(true);
-        dwpool.addThreadAvailableListener(new ThreadAvailableListener() {
-            @Override
-            public void retryDreamTask(final String dream) {
-                awaitTaskConsumer.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        //retry
-                        ConcurrentLinkedQueue<DreamTask> waitQueue = waitTaskQueueMap.get(dream);
-                        if ( waitQueue != null ){
-                            DreamTask dreamTask = waitQueue.poll();
-                            if ( dreamTask != null ){
-                                logger.debug(dreamTask+" retry execute :"+dreamTask.dream());
-                                Dreamwork.this.execute(dreamTask);
-                            }
-                        }
-                    }
-                });
-            }
-        });
+        addResourceAvailableListener();
+        checkResourceAvailable();
     }
+
+
 
     public Dreamwork(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit, BlockingQueue<Runnable> workQueue, ThreadFactory threadFactory) {
         dwpool = new Incubator(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory);
+        addResourceAvailableListener();
+        checkResourceAvailable();
     }
 
     public Dreamwork(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit, BlockingQueue<Runnable> workQueue, RejectedExecutionHandler handler) {
         dwpool = new Incubator(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, handler,true);
+        addResourceAvailableListener();
+        checkResourceAvailable();
     }
 
     public Dreamwork(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit, BlockingQueue<Runnable> workQueue, ThreadFactory threadFactory, RejectedExecutionHandler handler) {
         dwpool = new Incubator(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory, handler);
+        addResourceAvailableListener();
+        checkResourceAvailable();
     }
 
 
-
+    /**
+     * delegate this task to dwpool (ThreadPoolExecutor)
+     *
+     * @param dreamTask the need execute task
+     */
     public void execute(DreamTask dreamTask){
-        dwpool.execute(dreamTask);
+        try {
+            dwpool.execute(dreamTask);
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+        }
     }
 
     public void shutdown() {
@@ -130,6 +134,54 @@ public class Dreamwork {
         return sb.toString();
     }
 
+    /**
+     * 线程池添加资源(Thread)可用监听
+     */
+    private void addResourceAvailableListener() {
+        dwpool.addThreadAvailableListener(new ThreadAvailableListener() {
+            @Override
+            public void retryDreamTask(final String dream) {
+                awaitTaskConsumer.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        //retry
+                        ConcurrentLinkedQueue<DreamTask> waitQueue = waitTaskQueueMap.get(dream);
+                        if ( waitQueue != null ){
+                            DreamTask dreamTask = waitQueue.poll();
+                            if ( dreamTask != null && !isTimeout(dreamTask) ){
+                                logger.debug(dreamTask+" retry execute :"+dreamTask.dream());
+                                Dreamwork.this.execute(dreamTask);
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    private void checkResourceAvailable(){
+        checkService.scheduleWithFixedDelay(new Runnable() {
+            @Override
+            public void run() {
+                for (Map.Entry<String,ConcurrentLinkedQueue<DreamTask>> entry : waitTaskQueueMap.entrySet() ){
+                    if ( stat.isExecutable(entry.getKey()) ){
+                        DreamTask dreamTask = entry.getValue().poll();
+                        if ( dreamTask != null && isTimeout(dreamTask) ){
+                            logger.info("retry execute :" + dreamTask.dream() + " by check service");
+                            //just only one
+                            Dreamwork.this.execute(dreamTask);
+                        }
+                    }
+                }
+            }
+        },DEFAULT_TASK_TIMEOUT - 500,DEFAULT_TASK_TIMEOUT - 500,TimeUnit.MILLISECONDS);
+
+
+    }
+
+    /**
+     * thread pool based on {@link java.util.concurrent.ThreadPoolExecutor}
+     */
     class Incubator extends ThreadPoolExecutor{
         private DreamworkThreadFactory defaultThreadFactory = new DreamworkThreadFactory("Incubator",true);
 
@@ -163,7 +215,7 @@ public class Dreamwork {
         protected void beforeExecute(Thread t, Runnable r) {
             super.beforeExecute(t, r);
             DreamTask dreamTask = (DreamTask) r;
-            if ( stat.getRunningTaskNums(dreamTask.dream()) > ThresholdUtil.getTaskNumThreshold(dreamTask.dream())){
+            if ( stat.isExecutable(dreamTask.dream()) ){
                 ConcurrentLinkedQueue waitTaskQueue = waitTaskQueueMap.get(dreamTask.dream());
                 if ( waitTaskQueue == null ){
                     waitTaskQueueMap.putIfAbsent(dreamTask.dream(), new ConcurrentLinkedQueue<DreamTask>());

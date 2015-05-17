@@ -20,8 +20,8 @@ public class DreamworkTest {
 
     public static void main(String[] args){
         AtomicInteger doneWork = new AtomicInteger(0);
-        Dreamwork dreamwork = new Dreamwork(100,1000,1000, TimeUnit.MILLISECONDS,new LinkedBlockingDeque<Runnable>(1000),true);
-        int size = 2000;
+        Dreamwork dreamwork = new Dreamwork(100,800,1000, TimeUnit.MILLISECONDS,new LinkedBlockingDeque<Runnable>(100),true);
+        int size = 80;
         int i = 0;
         //monitor(dreamwork);
         while ( size-- > 0 ){
@@ -44,16 +44,16 @@ public class DreamworkTest {
         }
         boolean done = false;
         while ( true ){
-            if ( doneWork.get() == 20000){
+            if ( doneWork.get() == 800){
                 done = true;
                 break;
             } else {
-                /*try {
+                try {
                     Thread.sleep(1000);
                     System.out.println(doneWork.get() + " done");
                 } catch (InterruptedException e) {
                     e.printStackTrace();
-                }*/
+                }
             }
         }
         if ( !done ){
@@ -87,7 +87,10 @@ public class DreamworkTest {
 
         private String dream;
 
+        private long createTime;
+
         public MyDream(String dream,int index,AtomicInteger doneWork) {
+            this.createTime = System.currentTimeMillis();
             this.dream = dream;
             this.doneWork = doneWork;
             this.index = index;
@@ -96,6 +99,11 @@ public class DreamworkTest {
         @Override
         public String dream() {
             return dream;
+        }
+
+        @Override
+        public long createTime() {
+            return createTime;
         }
 
         @Override

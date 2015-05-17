@@ -19,4 +19,11 @@ public interface DreamTask extends Runnable{
     String dream();
 
 
+    /**
+     *
+     * @return the created time of the dream task
+     */
+    long createTime();
+
+
 }
